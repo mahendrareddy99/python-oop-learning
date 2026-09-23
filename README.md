@@ -88,3 +88,39 @@ python-oop-learning/
 ├── README.md
 │
 └── day01_oop_basics.py
+
+## Day 2 - Attributes and Methods
+
+### Topics Learned
+
+- Instance variables
+- Class variables
+- Creating class variables
+- Modifying class-level information
+- Instance methods
+- Class methods using `@classmethod`
+- Static methods using `@staticmethod`
+- Difference between instance, class, and static methods
+- Private-style attributes
+- Getter and setter methods
+- Validation in setters
+- Meaningful method names
+
+### Tasks Completed
+
+- [x] Understand instance variables
+- [x] Understand class variables
+- [x] Create a class variable
+- [x] Modify class-level information
+- [x] Understand instance methods
+- [x] Create `@classmethod`
+- [x] Create `@staticmethod`
+- [x] Understand when to use each method type
+- [x] Use private-style attributes
+- [x] Create getter/setter methods
+- [x] Add validation to setters
+- [x] Use meaningful method names
+
+### Practical Implementation
+
+Implemented all Day 2 concepts in `day02_attributes_and_methods.py` and tested the program successfully using Python.
