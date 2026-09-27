@@ -211,3 +211,62 @@ Tested:
 ### Day 3 Outcome
 
 Successfully implemented an employee hierarchy using inheritance, encapsulation, method overriding, `super()`, getters/setters, and polymorphism. All five automated test cases passed successfully.
+
+
+## Day 4 — Abstraction, Composition & OOP Design
+
+### Date
+24-Sep-2026
+
+### Objective
+Learn abstraction and composition and apply proper OOP design principles by building a Banking System.
+
+### Topics Covered
+- Understood abstraction
+- Learned abstract classes using `ABC`
+- Used `@abstractmethod`
+- Created concrete child classes
+- Implemented inheritance
+- Understood composition
+- Learned "has-a" relationships
+- Compared inheritance and composition
+- Separated responsibilities between classes
+- Added validation and error handling
+
+### Banking System
+Implemented a banking application with the following architecture:
+
+Bank
+- Customer
+- Account
+  - SavingsAccount
+  - CurrentAccount
+
+### Features Implemented
+- Customer creation
+- Bank and account management
+- Deposit functionality
+- Withdrawal functionality
+- Insufficient balance validation
+- Invalid amount validation
+- Savings account interest calculation
+- Current account withdrawal rules
+- Multiple customer management
+- Abstract `Account` class
+- Composition between Bank, Customer and Account
+
+### Testing
+Created `test_day04_banking.py` and tested:
+- Account creation
+- Deposit
+- Withdrawal
+- Insufficient balance
+- Savings interest
+- Current account rules
+- Invalid amounts
+- Multiple customers
+
+All Day 4 tests passed successfully.
+
+### Git Commit
+`b8f7a91 - Complete Day 4 abstraction and banking system`
