@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Departments
+{% endblock %}
+
+
+{% block content %}
+
+<h2>Department List</h2>
+
+
+<table border="1">
+
+    <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Description</th>
+    </tr>
+
+
+    {% for department in departments %}
+
+    <tr>
+
+        <td>
+            {{ department.id }}
+        </td>
+
+        <td>
+            {{ department.name }}
+        </td>
+
+        <td>
+            {{ department.description }}
+        </td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+{% endblock %}
