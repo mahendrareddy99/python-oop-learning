@@ -1,3 +1,4 @@
+
 from django.db import models
 
 
@@ -12,8 +13,8 @@ class Employee(models.Model):
 
     department = models.ForeignKey(
         "departments.Department",
-        on_delete=models.CASCADE,
-        related_name="employees"
+        on_delete=models.PROTECT,
+        related_name="employees",
     )
 
     def __str__(self):

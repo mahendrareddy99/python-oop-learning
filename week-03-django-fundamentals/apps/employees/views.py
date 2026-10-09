@@ -1,33 +1,11 @@
-from django.http import Http404
-from django.shortcuts import render
 
+from django.shortcuts import get_object_or_404, render
 
-employees = [
-    {
-        "id": 1,
-        "name": "Mahendra Reddy",
-        "email": "mahendra@example.com",
-        "role": "Python Developer",
-        "department": "Engineering",
-    },
-    {
-        "id": 2,
-        "name": "Sai Sarath Reddy",
-        "email": "sarath@example.com",
-        "role": "Software Engineer",
-        "department": "Engineering",
-    },
-    {
-        "id": 3,
-        "name": "Rahul Kumar",
-        "email": "rahul@example.com",
-        "role": "Data Analyst",
-        "department": "Analytics",
-    },
-]
+from .models import Employee
 
 
 def employee_home(request):
+    employees = Employee.objects.select_related("department").all()
     return render(
         request,
         "employees/list.html",
@@ -36,6 +14,7 @@ def employee_home(request):
 
 
 def employee_list(request):
+    employees = Employee.objects.select_related("department").all()
     return render(
         request,
         "employees/list.html",
@@ -44,14 +23,10 @@ def employee_list(request):
 
 
 def employee_detail(request, id):
-    employee = next(
-        (employee for employee in employees if employee["id"] == id),
-        None,
+    employee = get_object_or_404(
+        Employee.objects.select_related("department"),
+        id=id,
     )
-
-    if employee is None:
-        raise Http404("Employee not found")
-
     return render(
         request,
         "employees/detail.html",

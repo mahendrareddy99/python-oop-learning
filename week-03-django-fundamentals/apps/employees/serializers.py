@@ -1,10 +1,9 @@
-﻿from rest_framework import serializers
-
+﻿
+from rest_framework import serializers
 from .models import Employee
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Employee
         fields = [
@@ -18,5 +17,4 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "status",
             "department",
         ]
-
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "status"]
