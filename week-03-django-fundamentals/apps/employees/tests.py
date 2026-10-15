@@ -1,6 +1,7 @@
 
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -12,6 +13,17 @@ class EmployeeAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
+        # Create a user for authenticated API requests.
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="hrms_test_user",
+            password="TestPassword123!",
+        )
+
+        # Authenticate the client for existing success-path tests.
+        self.client.force_authenticate(user=self.user)
+
+        # Create test departments.
         self.department = Department.objects.create(
             name="Engineering",
             description="Engineering department",
@@ -22,6 +34,7 @@ class EmployeeAPITests(TestCase):
             description="HR department",
         )
 
+        # Create an active employee.
         Employee.objects.create(
             employee_code="EMP001",
             first_name="Ravi",
@@ -33,6 +46,7 @@ class EmployeeAPITests(TestCase):
             status=True,
         )
 
+        # Create an inactive employee.
         Employee.objects.create(
             employee_code="EMP002",
             first_name="Priya",
@@ -43,6 +57,24 @@ class EmployeeAPITests(TestCase):
             department=self.other_department,
             status=False,
         )
+
+    # --------------------------------------------------
+    # Authentication and permissions
+    # --------------------------------------------------
+
+    def test_unauthenticated_user_cannot_list_employees(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get("/api/employees/")
+
+        self.assertIn(response.status_code, [401, 403])
+
+    def test_unauthenticated_user_cannot_list_departments(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get("/api/departments/")
+
+        self.assertIn(response.status_code, [401, 403])
 
     # --------------------------------------------------
     # Employee list, search, filtering, and pagination
