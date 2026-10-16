@@ -17,16 +17,18 @@ class DepartmentPagination(PageNumberPagination):
     max_page_size = 100
 
     def get_paginated_response(self, data):
-        return Response({
-            "success": True,
-            "message": "Departments retrieved successfully.",
-            "data": data,
-            "pagination": {
-                "count": self.page.paginator.count,
-                "next": self.get_next_link(),
-                "previous": self.get_previous_link(),
-            },
-        })
+        return Response(
+            {
+                "success": True,
+                "message": "Departments retrieved successfully.",
+                "data": data,
+                "pagination": {
+                    "count": self.page.paginator.count,
+                    "next": self.get_next_link(),
+                    "previous": self.get_previous_link(),
+                },
+            }
+        )
 
 
 def validation_error_response(errors):
@@ -46,6 +48,7 @@ class DepartmentListCreateAPIView(APIView):
 
         # Search departments by name.
         search = request.query_params.get("search", "").strip()
+
         if search:
             departments = departments.filter(name__icontains=search)
 
@@ -151,7 +154,9 @@ class DepartmentDetailAPIView(APIView):
         return Response(
             {
                 "success": True,
-                "message": "Department partially updated successfully.",
+                "message": (
+                    "Department partially updated successfully."
+                ),
                 "data": DepartmentSerializer(department).data,
             },
             status=status.HTTP_200_OK,
@@ -174,4 +179,6 @@ class DepartmentDetailAPIView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(
+            status=status.HTTP_204_NO_CONTENT
+        )
