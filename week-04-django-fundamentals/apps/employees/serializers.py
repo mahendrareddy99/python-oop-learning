@@ -1,19 +1,19 @@
 ﻿
 from rest_framework import serializers
 
-from .models import Employee
 from apps.departments.models import Department
+from .models import Employee
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
     department = serializers.PrimaryKeyRelatedField(
-    queryset=Department.objects.all(),
-    error_messages={
-        "required": "An employee must belong to a department.",
-        "does_not_exist": "The selected department does not exist.",
-        "incorrect_type": "Provide a valid department ID.",
-    },
-)
+        queryset=Department.objects.all(),
+        error_messages={
+            "required": "An employee must belong to a department.",
+            "does_not_exist": "The selected department does not exist.",
+            "incorrect_type": "Provide a valid department ID.",
+        },
+    )
 
     department_details = serializers.SerializerMethodField()
 
@@ -31,7 +31,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             "department",
             "department_details",
         ]
-        read_only_fields = ["id", "status", "department_details"]
+        read_only_fields = [
+            "id",
+            "status",
+            "department_details",
+        ]
 
     def validate_employee_code(self, value):
         value = value.strip()
@@ -46,7 +50,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
         )
 
         if self.instance:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            queryset = queryset.exclude(
+                pk=self.instance.pk
+            )
 
         if queryset.exists():
             raise serializers.ValidationError(
@@ -78,10 +84,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         value = value.strip().lower()
 
-        queryset = Employee.objects.filter(email__iexact=value)
+        queryset = Employee.objects.filter(
+            email__iexact=value
+        )
 
         if self.instance:
-            queryset = queryset.exclude(pk=self.instance.pk)
+            queryset = queryset.exclude(
+                pk=self.instance.pk
+            )
 
         if queryset.exists():
             raise serializers.ValidationError(
@@ -111,6 +121,33 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 "Employees cannot be assigned to an inactive department."
             )
 
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            try:
+                membership = (
+                    request.user.organization_membership
+                )
+            except Exception:
+                raise serializers.ValidationError(
+                    "You must belong to an organization "
+                    "to assign a department."
+                )
+
+            if not membership.organization.status:
+                raise serializers.ValidationError(
+                    "Your organization is inactive."
+                )
+
+            if (
+                value.organization_id
+                != membership.organization_id
+            ):
+                raise serializers.ValidationError(
+                    "The selected department does not belong "
+                    "to your organization."
+                )
+
         return value
 
     def validate(self, attrs):
@@ -121,7 +158,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
         if department is None:
             raise serializers.ValidationError({
-                "department": "An employee must belong to a department."
+                "department": (
+                    "An employee must belong to a department."
+                )
             })
 
         return attrs

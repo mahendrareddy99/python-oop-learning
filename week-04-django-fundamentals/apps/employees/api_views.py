@@ -5,6 +5,11 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.common.permissions import (
+    get_user_organization,
+    require_write_role,
+)
+
 from .models import Employee
 from .pagination import EmployeePagination
 from .serializers import EmployeeSerializer
@@ -42,7 +47,10 @@ def business_rule_response(exc):
     )
 
 
-def error_response(message, http_status=status.HTTP_400_BAD_REQUEST):
+def error_response(
+    message,
+    http_status=status.HTTP_400_BAD_REQUEST,
+):
     return Response(
         {
             "success": False,
@@ -53,36 +61,53 @@ def error_response(message, http_status=status.HTTP_400_BAD_REQUEST):
 
 
 class EmployeeListCreateAPIView(APIView):
+
     def get(self, request):
-        query = request.query_params.get("search", "").strip()
+        organization = get_user_organization(request.user)
+
+        query = request.query_params.get(
+            "search", ""
+        ).strip()
 
         include_inactive = (
-            request.query_params.get("include_inactive", "").lower()
+            request.query_params.get(
+                "include_inactive", ""
+            ).lower()
             == "true"
         )
 
-        status_param = request.query_params.get("status", "").lower()
-        department_param = request.query_params.get("department")
+        status_param = request.query_params.get(
+            "status", ""
+        ).lower()
 
-        # Validate the status filter.
-        if status_param and status_param not in ("true", "false"):
+        department_param = request.query_params.get(
+            "department"
+        )
+
+        if status_param and status_param not in (
+            "true",
+            "false",
+        ):
             return error_response(
                 "Status must be either 'true' or 'false'."
             )
 
-        # Retrieve employees using the existing search service.
+        # Keep the existing search service and restrict its results
+        # to employees in the authenticated user's organization.
         employees = search_employees(
             query=query,
-            active_only=not include_inactive and not status_param,
+            active_only=(
+                not include_inactive and not status_param
+            ),
+        ).filter(
+            department__organization=organization
         )
 
-        # Apply an explicit status filter.
         if status_param:
             employees = employees.filter(
                 status=(status_param == "true")
             )
 
-        # Filter by department ID.
         if department_param:
             try:
                 department_id = int(department_param)
@@ -99,7 +124,6 @@ class EmployeeListCreateAPIView(APIView):
                 department_id=department_id
             )
 
-        # Apply pagination.
         paginator = EmployeePagination()
         page = paginator.paginate_queryset(
             employees,
@@ -107,18 +131,51 @@ class EmployeeListCreateAPIView(APIView):
             view=self,
         )
 
-        serializer = EmployeeSerializer(page, many=True)
+        serializer = EmployeeSerializer(
+            page,
+            many=True,
+            context={"request": request},
+        )
 
-        return paginator.get_paginated_response(serializer.data)
+        return paginator.get_paginated_response(
+            serializer.data
+        )
 
     def post(self, request):
-        serializer = EmployeeSerializer(data=request.data)
+        require_write_role(request.user)
+
+        organization = get_user_organization(request.user)
+
+        serializer = EmployeeSerializer(
+            data=request.data,
+            context={"request": request},
+        )
 
         if not serializer.is_valid():
-            return validation_error_response(serializer.errors)
+            return validation_error_response(
+                serializer.errors
+            )
+
+        department = serializer.validated_data.get(
+            "department"
+        )
+
+        # Defense in depth: never create an employee in a
+        # department belonging to a different organization.
+        if (
+            department is None
+            or department.organization_id != organization.id
+        ):
+            return error_response(
+                "The selected department does not belong "
+                "to your organization.",
+                status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
-            employee = create_employee(serializer.validated_data)
+            employee = create_employee(
+                serializer.validated_data
+            )
 
         except EmployeeBusinessRuleError as exc:
             return business_rule_response(exc)
@@ -127,41 +184,76 @@ class EmployeeListCreateAPIView(APIView):
             {
                 "success": True,
                 "message": "Employee created successfully.",
-                "data": EmployeeSerializer(employee).data,
+                "data": EmployeeSerializer(
+                    employee,
+                    context={"request": request},
+                ).data,
             },
             status=status.HTTP_201_CREATED,
         )
 
 
 class EmployeeDetailAPIView(APIView):
-    def get_object(self, employee_id):
+
+    def get_object(self, request, employee_id):
+        organization = get_user_organization(request.user)
+
+        # Return 404 for an employee outside the user's organization.
         return get_object_or_404(
             Employee.objects.select_related("department"),
             id=employee_id,
+            department__organization=organization,
         )
 
     def get(self, request, employee_id):
-        employee = self.get_object(employee_id)
+        employee = self.get_object(
+            request, employee_id
+        )
 
         return Response(
             {
                 "success": True,
                 "message": "Employee retrieved successfully.",
-                "data": EmployeeSerializer(employee).data,
+                "data": EmployeeSerializer(
+                    employee,
+                    context={"request": request},
+                ).data,
             },
             status=status.HTTP_200_OK,
         )
 
     def put(self, request, employee_id):
-        employee = self.get_object(employee_id)
+        require_write_role(request.user)
+
+        employee = self.get_object(
+            request, employee_id
+        )
 
         serializer = EmployeeSerializer(
             employee,
             data=request.data,
+            context={"request": request},
         )
 
         if not serializer.is_valid():
-            return validation_error_response(serializer.errors)
+            return validation_error_response(
+                serializer.errors
+            )
+
+        organization = get_user_organization(request.user)
+        department = serializer.validated_data.get(
+            "department", employee.department
+        )
+
+        if (
+            department is None
+            or department.organization_id != organization.id
+        ):
+            return error_response(
+                "The selected department does not belong "
+                "to your organization.",
+                status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             employee = update_employee(
@@ -176,22 +268,47 @@ class EmployeeDetailAPIView(APIView):
             {
                 "success": True,
                 "message": "Employee updated successfully.",
-                "data": EmployeeSerializer(employee).data,
+                "data": EmployeeSerializer(
+                    employee,
+                    context={"request": request},
+                ).data,
             },
             status=status.HTTP_200_OK,
         )
 
     def patch(self, request, employee_id):
-        employee = self.get_object(employee_id)
+        require_write_role(request.user)
+
+        employee = self.get_object(
+            request, employee_id
+        )
 
         serializer = EmployeeSerializer(
             employee,
             data=request.data,
             partial=True,
+            context={"request": request},
         )
 
         if not serializer.is_valid():
-            return validation_error_response(serializer.errors)
+            return validation_error_response(
+                serializer.errors
+            )
+
+        organization = get_user_organization(request.user)
+        department = serializer.validated_data.get(
+            "department", employee.department
+        )
+
+        if (
+            department is None
+            or department.organization_id != organization.id
+        ):
+            return error_response(
+                "The selected department does not belong "
+                "to your organization.",
+                status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             employee = update_employee(
@@ -205,14 +322,23 @@ class EmployeeDetailAPIView(APIView):
         return Response(
             {
                 "success": True,
-                "message": "Employee partially updated successfully.",
-                "data": EmployeeSerializer(employee).data,
+                "message": (
+                    "Employee partially updated successfully."
+                ),
+                "data": EmployeeSerializer(
+                    employee,
+                    context={"request": request},
+                ).data,
             },
             status=status.HTTP_200_OK,
         )
 
     def post(self, request, employee_id):
-        employee = self.get_object(employee_id)
+        require_write_role(request.user)
+
+        employee = self.get_object(
+            request, employee_id
+        )
 
         if request.data.get("action") != "deactivate":
             return error_response(
@@ -229,13 +355,20 @@ class EmployeeDetailAPIView(APIView):
             {
                 "success": True,
                 "message": "Employee deactivated successfully.",
-                "data": EmployeeSerializer(employee).data,
+                "data": EmployeeSerializer(
+                    employee,
+                    context={"request": request},
+                ).data,
             },
             status=status.HTTP_200_OK,
         )
 
     def delete(self, request, employee_id):
-        employee = self.get_object(employee_id)
+        require_write_role(request.user)
+
+        employee = self.get_object(
+            request, employee_id
+        )
 
         try:
             delete_employee(employee)

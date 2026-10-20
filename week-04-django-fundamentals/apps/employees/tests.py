@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.common.models import Organization, OrganizationMembership
 from apps.departments.models import Department
 from apps.employees.models import Employee
 
@@ -13,23 +14,34 @@ class EmployeeAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-        # Create a user for authenticated API requests.
         User = get_user_model()
         self.user = User.objects.create_user(
             username="hrms_test_user",
             password="TestPassword123!",
         )
 
-        # Authenticate the client for existing success-path tests.
+        # Create the organization for the authenticated user.
+        self.organization = Organization.objects.create(
+            name="Test Organization",
+        )
+
+        OrganizationMembership.objects.create(
+            user=self.user,
+            organization=self.organization,
+            role=OrganizationMembership.Role.ADMIN,
+        )
+
         self.client.force_authenticate(user=self.user)
 
-        # Create test departments.
+        # Both departments belong to the user's organization.
         self.department = Department.objects.create(
+            organization=self.organization,
             name="Engineering",
             description="Engineering department",
         )
 
         self.other_department = Department.objects.create(
+            organization=self.organization,
             name="Human Resources",
             description="HR department",
         )
@@ -58,6 +70,47 @@ class EmployeeAPITests(TestCase):
             status=False,
         )
 
+    def create_other_organization_data(self):
+        """Create a second organization, department, and employee."""
+        organization = Organization.objects.create(
+            name="Another Organization",
+        )
+
+        department = Department.objects.create(
+            organization=organization,
+            name="Engineering",
+            description="Other organization's engineering team",
+        )
+
+        employee = Employee.objects.create(
+            employee_code="OTHER001",
+            first_name="Other",
+            last_name="Employee",
+            email="other.employee@example.com",
+            phone="9876543299",
+            date_of_joining=date(2026, 4, 1),
+            department=department,
+            status=True,
+        )
+
+        return organization, department, employee
+
+    def create_staff_user(self):
+        """Create a user with read-only staff permissions."""
+        User = get_user_model()
+        staff_user = User.objects.create_user(
+            username="hrms_staff_user",
+            password="StaffPassword123!",
+        )
+
+        OrganizationMembership.objects.create(
+            user=staff_user,
+            organization=self.organization,
+            role=OrganizationMembership.Role.STAFF,
+        )
+
+        return staff_user
+
     # --------------------------------------------------
     # Authentication and permissions
     # --------------------------------------------------
@@ -76,6 +129,104 @@ class EmployeeAPITests(TestCase):
 
         self.assertIn(response.status_code, [401, 403])
 
+    def test_user_without_membership_cannot_list_employees(self):
+        User = get_user_model()
+        user_without_membership = User.objects.create_user(
+            username="no_membership_user",
+            password="TestPassword123!",
+        )
+
+        self.client.force_authenticate(
+            user=user_without_membership
+        )
+
+        response = self.client.get("/api/employees/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_cannot_create_employee(self):
+        staff_user = self.create_staff_user()
+        self.client.force_authenticate(user=staff_user)
+
+        payload = {
+            "employee_code": "EMP003",
+            "first_name": "Arun",
+            "last_name": "Reddy",
+            "email": "arun.test@example.com",
+            "phone": "9876543212",
+            "date_of_joining": "2026-03-01",
+            "department": self.department.id,
+        }
+
+        response = self.client.post(
+            "/api/employees/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Employee.objects.filter(
+                employee_code="EMP003"
+            ).exists()
+        )
+
+    def test_staff_cannot_create_department(self):
+        staff_user = self.create_staff_user()
+        self.client.force_authenticate(user=staff_user)
+
+        response = self.client.post(
+            "/api/departments/",
+            {
+                "name": "Finance",
+                "description": "Finance department",
+                "status": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(
+            Department.objects.filter(
+                organization=self.organization,
+                name="Finance",
+            ).exists()
+        )
+
+    def test_staff_cannot_update_department(self):
+        staff_user = self.create_staff_user()
+        self.client.force_authenticate(user=staff_user)
+
+        response = self.client.patch(
+            f"/api/departments/{self.department.id}/",
+            {"name": "Unauthorized Update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        self.department.refresh_from_db()
+        self.assertEqual(self.department.name, "Engineering")
+
+    def test_staff_cannot_update_employee(self):
+        staff_user = self.create_staff_user()
+        self.client.force_authenticate(user=staff_user)
+
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
+
+        response = self.client.patch(
+            f"/api/employees/{employee.id}/",
+            {"first_name": "Unauthorized Update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        employee.refresh_from_db()
+        self.assertEqual(employee.first_name, "Ravi")
+
     # --------------------------------------------------
     # Employee list, search, filtering, and pagination
     # --------------------------------------------------
@@ -87,7 +238,9 @@ class EmployeeAPITests(TestCase):
         self.assertTrue(response.data["success"])
         self.assertIn("data", response.data)
         self.assertIn("pagination", response.data)
-        self.assertEqual(response.data["pagination"]["count"], 1)
+        self.assertEqual(
+            response.data["pagination"]["count"], 1
+        )
 
     def test_search_employees(self):
         response = self.client.get(
@@ -150,7 +303,9 @@ class EmployeeAPITests(TestCase):
         self.assertTrue(response.data["success"])
         self.assertIn("data", response.data)
         self.assertIn("pagination", response.data)
-        self.assertEqual(response.data["pagination"]["count"], 2)
+        self.assertEqual(
+            response.data["pagination"]["count"], 2
+        )
 
     def test_department_detail_returns_department(self):
         response = self.client.get(
@@ -190,11 +345,16 @@ class EmployeeAPITests(TestCase):
             "EMP003",
         )
         self.assertTrue(
-            Employee.objects.filter(employee_code="EMP003").exists()
+            Employee.objects.filter(
+                employee_code="EMP003",
+                department__organization=self.organization,
+            ).exists()
         )
 
     def test_retrieve_employee_detail(self):
-        employee = Employee.objects.get(employee_code="EMP001")
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
 
         response = self.client.get(
             f"/api/employees/{employee.id}/"
@@ -207,7 +367,9 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_update_employee(self):
-        employee = Employee.objects.get(employee_code="EMP001")
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
 
         payload = {
             "employee_code": "EMP001",
@@ -232,7 +394,9 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_partial_update_employee(self):
-        employee = Employee.objects.get(employee_code="EMP001")
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
 
         response = self.client.patch(
             f"/api/employees/{employee.id}/",
@@ -247,7 +411,9 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_deactivate_employee(self):
-        employee = Employee.objects.get(employee_code="EMP001")
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
 
         response = self.client.post(
             f"/api/employees/{employee.id}/",
@@ -261,7 +427,9 @@ class EmployeeAPITests(TestCase):
         self.assertFalse(employee.status)
 
     def test_active_employee_cannot_be_deleted(self):
-        employee = Employee.objects.get(employee_code="EMP001")
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
 
         response = self.client.delete(
             f"/api/employees/{employee.id}/"
@@ -273,7 +441,9 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_inactive_employee_can_be_deleted(self):
-        employee = Employee.objects.get(employee_code="EMP002")
+        employee = Employee.objects.get(
+            employee_code="EMP002"
+        )
 
         response = self.client.delete(
             f"/api/employees/{employee.id}/"
@@ -285,7 +455,9 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_employee_not_found_returns_404(self):
-        response = self.client.get("/api/employees/999999/")
+        response = self.client.get(
+            "/api/employees/999999/"
+        )
 
         self.assertEqual(response.status_code, 404)
 
@@ -332,7 +504,10 @@ class EmployeeAPITests(TestCase):
             "Finance",
         )
         self.assertTrue(
-            Department.objects.filter(name="Finance").exists()
+            Department.objects.filter(
+                organization=self.organization,
+                name="Finance",
+            ).exists()
         )
 
     def test_create_department_with_duplicate_name_returns_400(self):
@@ -391,6 +566,7 @@ class EmployeeAPITests(TestCase):
 
     def test_delete_department_without_employees(self):
         department = Department.objects.create(
+            organization=self.organization,
             name="Finance",
             description="Finance department",
         )
@@ -401,7 +577,9 @@ class EmployeeAPITests(TestCase):
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(
-            Department.objects.filter(id=department.id).exists()
+            Department.objects.filter(
+                id=department.id
+            ).exists()
         )
 
     def test_department_with_employees_cannot_be_deleted(self):
@@ -417,6 +595,152 @@ class EmployeeAPITests(TestCase):
         )
 
     def test_department_not_found_returns_404(self):
-        response = self.client.get("/api/departments/999999/")
+        response = self.client.get(
+            "/api/departments/999999/"
+        )
 
         self.assertEqual(response.status_code, 404)
+
+    # --------------------------------------------------
+    # Organization isolation tests
+    # --------------------------------------------------
+
+    def test_employee_list_excludes_other_organization(self):
+        _, _, other_employee = (
+            self.create_other_organization_data()
+        )
+
+        response = self.client.get("/api/employees/")
+
+        self.assertEqual(response.status_code, 200)
+
+        employee_ids = [
+            item["id"] for item in response.data["data"]
+        ]
+
+        self.assertNotIn(other_employee.id, employee_ids)
+
+    def test_cannot_retrieve_employee_from_other_organization(self):
+        _, _, other_employee = (
+            self.create_other_organization_data()
+        )
+
+        response = self.client.get(
+            f"/api/employees/{other_employee.id}/"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_department_list_excludes_other_organization(self):
+        _, other_department, _ = (
+            self.create_other_organization_data()
+        )
+
+        response = self.client.get("/api/departments/")
+
+        self.assertEqual(response.status_code, 200)
+
+        department_ids = [
+            item["id"] for item in response.data["data"]
+        ]
+
+        self.assertNotIn(
+            other_department.id,
+            department_ids,
+        )
+
+    def test_cannot_retrieve_department_from_other_organization(self):
+        _, other_department, _ = (
+            self.create_other_organization_data()
+        )
+
+        response = self.client.get(
+            f"/api/departments/{other_department.id}/"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_create_employee_in_other_organization(self):
+        _, other_department, _ = (
+            self.create_other_organization_data()
+        )
+
+        payload = {
+            "employee_code": "EMP003",
+            "first_name": "Arun",
+            "last_name": "Reddy",
+            "email": "arun.test@example.com",
+            "phone": "9876543212",
+            "date_of_joining": "2026-03-01",
+            "department": other_department.id,
+        }
+
+        response = self.client.post(
+            "/api/employees/",
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(
+            Employee.objects.filter(
+                employee_code="EMP003"
+            ).exists()
+        )
+
+    def test_department_creation_uses_users_organization(self):
+        other_organization, _, _ = (
+            self.create_other_organization_data()
+        )
+
+        response = self.client.post(
+            "/api/departments/",
+            {
+                "name": "Finance",
+                "description": "Finance department",
+                "status": True,
+                "organization": other_organization.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        department = Department.objects.get(
+            name="Finance",
+            organization=self.organization,
+        )
+
+        self.assertEqual(
+            department.organization_id,
+            self.organization.id,
+        )
+        self.assertFalse(
+            Department.objects.filter(
+                name="Finance",
+                organization=other_organization,
+            ).exists()
+        )
+
+    def test_cannot_move_employee_to_other_organization(self):
+        _, other_department, _ = (
+            self.create_other_organization_data()
+        )
+
+        employee = Employee.objects.get(
+            employee_code="EMP001"
+        )
+
+        response = self.client.patch(
+            f"/api/employees/{employee.id}/",
+            {"department": other_department.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+        employee.refresh_from_db()
+        self.assertEqual(
+            employee.department_id,
+            self.department.id,
+        )

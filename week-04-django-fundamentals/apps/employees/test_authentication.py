@@ -4,6 +4,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from apps.common.models import Organization, OrganizationMembership
+
 
 class AuthenticationTests(TestCase):
 
@@ -13,6 +15,18 @@ class AuthenticationTests(TestCase):
         self.user = get_user_model().objects.create_user(
             username="auth_test_user",
             password="TestPassword123!",
+        )
+
+        # Create an organization for the authenticated user.
+        self.organization = Organization.objects.create(
+            name="Authentication Test Organization",
+        )
+
+        # The APIs require every authenticated user to have membership.
+        OrganizationMembership.objects.create(
+            user=self.user,
+            organization=self.organization,
+            role=OrganizationMembership.Role.ADMIN,
         )
 
     def test_anonymous_user_cannot_access_employee_api(self):
