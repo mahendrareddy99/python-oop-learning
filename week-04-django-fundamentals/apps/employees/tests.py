@@ -744,3 +744,78 @@ class EmployeeAPITests(TestCase):
             employee.department_id,
             self.department.id,
         )
+
+    # Day 3: ORM efficiency and transactions
+
+    def test_employee_serialization_uses_one_query_with_select_related(self):
+        from apps.employees.serializers import EmployeeSerializer
+        from apps.employees.services import search_employees
+
+        Employee.objects.create(
+            employee_code="EMP003",
+            first_name="Arun",
+            last_name="Reddy",
+            email="arun.test@example.com",
+            phone="9876543212",
+            date_of_joining=date(2026, 3, 1),
+            department=self.department,
+            status=True,
+        )
+
+        with self.assertNumQueries(1):
+            employees = list(search_employees(active_only=True))
+            data = EmployeeSerializer(employees, many=True).data
+
+        self.assertEqual(len(data), 2)
+        self.assertEqual(
+            data[0]["department_details"]["name"],
+            "Engineering",
+        )
+
+    def test_departments_prefetch_employees_in_two_queries(self):
+        from apps.departments.services import get_departments_with_employees
+
+        with self.assertNumQueries(2):
+            departments = list(get_departments_with_employees())
+            employee_counts = {
+                department.name: len(department.employees.all())
+                for department in departments
+            }
+
+        self.assertEqual(len(employee_counts), 2)
+        self.assertEqual(employee_counts["Engineering"], 1)
+        self.assertEqual(employee_counts["Human Resources"], 1)
+
+    def test_multi_step_transaction_rolls_back_on_integrity_error(self):
+        from django.db import IntegrityError, transaction
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Department.objects.create(
+                    organization=self.organization,
+                    name="Temporary Department",
+                    description="Should be rolled back",
+                )
+
+                Employee.objects.create(
+                    employee_code="EMP001",
+                    first_name="Duplicate",
+                    last_name="Employee",
+                    email="duplicate.test@example.com",
+                    phone="9876543219",
+                    date_of_joining=date(2026, 4, 1),
+                    department=self.department,
+                    status=True,
+                )
+
+        self.assertFalse(
+            Department.objects.filter(
+                organization=self.organization,
+                name="Temporary Department",
+            ).exists()
+        )
+
+        self.assertEqual(
+            Employee.objects.filter(employee_code="EMP001").count(),
+            1,
+        )
