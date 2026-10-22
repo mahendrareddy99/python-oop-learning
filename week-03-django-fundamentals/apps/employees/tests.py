@@ -2,39 +2,52 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.common.models import Organization, OrganizationMembership
 from apps.departments.models import Department
+from apps.departments.services import get_departments_with_employees
 from apps.employees.models import Employee
+from apps.employees.serializers import EmployeeSerializer
+from apps.employees.services import search_employees
 
 
 class EmployeeAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-        # Create a user for authenticated API requests.
         User = get_user_model()
         self.user = User.objects.create_user(
             username="hrms_test_user",
             password="TestPassword123!",
         )
 
-        # Authenticate the client for existing success-path tests.
+        self.organization = Organization.objects.create(
+            name="Test Organization",
+        )
+
+        OrganizationMembership.objects.create(
+            user=self.user,
+            organization=self.organization,
+            role=OrganizationMembership.Role.ADMIN,
+        )
+
         self.client.force_authenticate(user=self.user)
 
-        # Create test departments.
         self.department = Department.objects.create(
+            organization=self.organization,
             name="Engineering",
             description="Engineering department",
         )
 
         self.other_department = Department.objects.create(
+            organization=self.organization,
             name="Human Resources",
             description="HR department",
         )
 
-        # Create an active employee.
         Employee.objects.create(
             employee_code="EMP001",
             first_name="Ravi",
@@ -46,7 +59,6 @@ class EmployeeAPITests(TestCase):
             status=True,
         )
 
-        # Create an inactive employee.
         Employee.objects.create(
             employee_code="EMP002",
             first_name="Priya",
@@ -56,6 +68,40 @@ class EmployeeAPITests(TestCase):
             date_of_joining=date(2026, 2, 1),
             department=self.other_department,
             status=False,
+        )
+
+    def create_other_organization_data(self):
+        """Create a second organization, department, and employee."""
+        organization = Organization.objects.create(
+            name="Another Organization",
+        )
+
+        department = Department.objects.create(
+            organization=organization,
+            name="Engineering",
+            description="Other organization's engineering team",
+        )
+
+        employee = Employee.objects.create(
+            employee_code="OTHER001",
+            first_name="Other",
+            last_name="Employee",
+            email="other.employee@example.com",
+            phone="9876543299",
+            date_of_joining=date(2026, 4, 1),
+            department=department,
+            status=True,
+        )
+
+        return organization, department, employee
+
+    def create_staff_user(self):
+        """Create a user with read-only staff permissions."""
+        User = get_user_model()
+        return User.objects.create_user(
+            username="hrms_staff_user",
+            password="TestPassword123!",
+            is_staff=True,
         )
 
     # --------------------------------------------------
@@ -138,6 +184,14 @@ class EmployeeAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_employee_pagination_out_of_range_returns_404(self):
+        response = self.client.get(
+            "/api/employees/",
+            {"page": 999},
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     # --------------------------------------------------
     # Department list and detail
@@ -391,6 +445,7 @@ class EmployeeAPITests(TestCase):
 
     def test_delete_department_without_employees(self):
         department = Department.objects.create(
+            organization=self.organization,
             name="Finance",
             description="Finance department",
         )
@@ -420,3 +475,73 @@ class EmployeeAPITests(TestCase):
         response = self.client.get("/api/departments/999999/")
 
         self.assertEqual(response.status_code, 404)
+
+    # --------------------------------------------------
+    # Day 3: ORM efficiency and transactions
+    # --------------------------------------------------
+
+    def test_employee_serialization_uses_one_query_with_select_related(self):
+        Employee.objects.create(
+            employee_code="EMP003",
+            first_name="Arun",
+            last_name="Reddy",
+            email="arun.test@example.com",
+            phone="9876543212",
+            date_of_joining=date(2026, 3, 1),
+            department=self.department,
+            status=True,
+        )
+
+        with self.assertNumQueries(1):
+            employees = list(search_employees(active_only=True))
+            data = EmployeeSerializer(employees, many=True).data
+
+        self.assertEqual(len(data), 2)
+        self.assertEqual(
+            data[0]["department_details"]["name"],
+            "Engineering",
+        )
+
+    def test_departments_prefetch_employees_in_two_queries(self):
+        with self.assertNumQueries(2):
+            departments = list(get_departments_with_employees())
+            employee_counts = {
+                department.name: len(department.employees.all())
+                for department in departments
+            }
+
+        self.assertEqual(len(employee_counts), 2)
+        self.assertEqual(employee_counts["Engineering"], 1)
+        self.assertEqual(employee_counts["Human Resources"], 1)
+
+    def test_multi_step_transaction_rolls_back_on_integrity_error(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Department.objects.create(
+                    organization=self.organization,
+                    name="Temporary Department",
+                    description="Should be rolled back",
+                )
+
+                Employee.objects.create(
+                    employee_code="EMP001",
+                    first_name="Duplicate",
+                    last_name="Employee",
+                    email="duplicate.test@example.com",
+                    phone="9876543219",
+                    date_of_joining=date(2026, 4, 1),
+                    department=self.department,
+                    status=True,
+                )
+
+        self.assertFalse(
+            Department.objects.filter(
+                organization=self.organization,
+                name="Temporary Department",
+            ).exists()
+        )
+
+        self.assertEqual(
+            Employee.objects.filter(employee_code="EMP001").count(),
+            1,
+        )
