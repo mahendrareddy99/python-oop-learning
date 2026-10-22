@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Employee Details
+{% endblock %}
+
+
+{% block content %}
+
+<h2>Employee Details</h2>
+
+
+<p>
+    <strong>ID:</strong>
+    {{ employee.id }}
+</p>
+
+
+<p>
+    <strong>Name:</strong>
+    {{ employee.name }}
+</p>
+
+
+<p>
+    <strong>Email:</strong>
+    {{ employee.email }}
+</p>
+
+
+<p>
+    <strong>Role:</strong>
+    {{ employee.role }}
+</p>
+
+
+<p>
+    <strong>Department:</strong>
+    {{ employee.department }}
+</p>
+
+
+<br>
+
+
+<a href="{% url 'employee-list' %}">
+    Back to Employee List
+</a>
+
+{% endblock %}
