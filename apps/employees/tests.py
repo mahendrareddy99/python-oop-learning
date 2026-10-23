@@ -255,6 +255,17 @@ class EmployeeAPITests(TestCase):
             "EMP001",
         )
 
+    def test_search_employees_returns_empty_results(self):
+        response = self.client.get(
+            "/api/employees/",
+            {"search": "NoMatchingEmployeeXYZ"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pagination"]["count"], 0)
+        self.assertEqual(response.data["data"], [])
+
+
     def test_filter_employees_by_status(self):
         response = self.client.get(
             "/api/employees/",
