@@ -6,6 +6,7 @@ Run:
 
 Expected output is printed by the example section at the bottom.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -76,7 +77,9 @@ class Product:
             raise ValueError("Only products with the same SKU can be added.")
         if self.unit_price != other.unit_price:
             raise ValueError("Products with the same SKU must have the same price.")
-        return Product(self.sku, self.name, self.unit_price, self.quantity + other.quantity)
+        return Product(
+            self.sku, self.name, self.unit_price, self.quantity + other.quantity
+        )
 
     def __sub__(self, other: object) -> Product:
         """Subtract quantities for the same SKU without allowing negative stock."""
@@ -86,7 +89,9 @@ class Product:
             raise ValueError("Only products with the same SKU can be subtracted.")
         if other.quantity > self.quantity:
             raise ValueError("Cannot subtract more stock than is available.")
-        return Product(self.sku, self.name, self.unit_price, self.quantity - other.quantity)
+        return Product(
+            self.sku, self.name, self.unit_price, self.quantity - other.quantity
+        )
 
 
 if __name__ == "__main__":

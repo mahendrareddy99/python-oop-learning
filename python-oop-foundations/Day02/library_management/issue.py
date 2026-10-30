@@ -1,7 +1,9 @@
 """Book issue/return workflows and late-fine calculations."""
+
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from typing import Any
+
 from .book import BookManager
 from .exceptions import AvailabilityError, NotFoundError, ValidationError
 from .member import MemberManager
@@ -37,8 +39,12 @@ class IssueManager:
     FILE = "issues.json"
 
     def __init__(
-        self, storage: JSONStorage, books: BookManager, members: MemberManager,
-        loan_days: int = 14, fine_per_day: float = 5.0
+        self,
+        storage: JSONStorage,
+        books: BookManager,
+        members: MemberManager,
+        loan_days: int = 14,
+        fine_per_day: float = 5.0,
     ) -> None:
         self.storage = storage
         self.books = books
@@ -52,7 +58,9 @@ class IssueManager:
         """Return all issue records."""
         return [Issue.from_dict(row) for row in self.storage.read(self.FILE)]
 
-    def issue_book(self, book_id: str, member_id: str, issue_date: str | None = None) -> Issue:
+    def issue_book(
+        self, book_id: str, member_id: str, issue_date: str | None = None
+    ) -> Issue:
         """Issue one available copy to an active member."""
         self.members.validate_active(member_id)
         book = self.books.get(book_id)
@@ -80,10 +88,14 @@ class IssueManager:
             raise NotFoundError(f"Issue '{issue_id}' was not found.")
         if target.return_date is not None:
             raise AvailabilityError("This issue has already been returned.")
-        returned = valid_iso_date(return_date or date.today().isoformat(), "Return date")
+        returned = valid_iso_date(
+            return_date or date.today().isoformat(), "Return date"
+        )
         if date.fromisoformat(returned) < date.fromisoformat(target.issue_date):
             raise ValidationError("Return date cannot be before issue date.")
-        late_days = max(0, (date.fromisoformat(returned) - date.fromisoformat(target.due_date)).days)
+        late_days = max(
+            0, (date.fromisoformat(returned) - date.fromisoformat(target.due_date)).days
+        )
         target.return_date = returned
         target.fine = round(late_days * self.fine_per_day, 2)
         self._save(issues)
@@ -94,7 +106,8 @@ class IssueManager:
         """List unreturned issues whose due date is before the supplied date."""
         today = date.fromisoformat(valid_iso_date(on_date or date.today().isoformat()))
         return [
-            issue for issue in self.list_issues()
+            issue
+            for issue in self.list_issues()
             if issue.return_date is None and date.fromisoformat(issue.due_date) < today
         ]
 

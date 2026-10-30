@@ -1,6 +1,8 @@
 """Book model and book catalogue operations."""
+
 from dataclasses import asdict, dataclass
 from typing import Any
+
 from .exceptions import NotFoundError, ValidationError
 from .storage import JSONStorage
 from .validator import positive_int, required_text
@@ -66,23 +68,30 @@ class BookManager:
         allowed = {"title", "author", "isbn", "total_copies"}
         unknown = set(changes) - allowed
         if unknown:
-            raise ValidationError(f"Unsupported book fields: {', '.join(sorted(unknown))}")
+            raise ValidationError(
+                f"Unsupported book fields: {', '.join(sorted(unknown))}"
+            )
         books = self.list_books()
         target = next((book for book in books if book.id == book_id), None)
         if target is None:
             raise NotFoundError(f"Book '{book_id}' was not found.")
         for field in ("title", "author", "isbn"):
             if field in changes:
-                changes[field] = required_text(changes[field], field.replace("_", " ").title())
+                changes[field] = required_text(
+                    changes[field], field.replace("_", " ").title()
+                )
         if "isbn" in changes and any(
-            b.id != book_id and b.isbn.casefold() == changes["isbn"].casefold() for b in books
+            b.id != book_id and b.isbn.casefold() == changes["isbn"].casefold()
+            for b in books
         ):
             raise ValidationError(f"ISBN '{changes['isbn']}' already exists.")
         if "total_copies" in changes:
             new_total = positive_int(changes["total_copies"], "Total copies")
             borrowed = target.total_copies - target.available_copies
             if new_total < borrowed:
-                raise ValidationError("Total copies cannot be lower than copies currently borrowed.")
+                raise ValidationError(
+                    "Total copies cannot be lower than copies currently borrowed."
+                )
             target.available_copies = new_total - borrowed
         for field, value in changes.items():
             setattr(target, field, value)
@@ -103,7 +112,8 @@ class BookManager:
         """Search title, author, or ISBN without case sensitivity."""
         query = required_text(query, "Search query").casefold()
         return [
-            book for book in self.list_books()
+            book
+            for book in self.list_books()
             if query in book.title.casefold()
             or query in book.author.casefold()
             or query in book.isbn.casefold()

@@ -1,4 +1,3 @@
-
 """Story 2: Practical examples of Python OOP concepts."""
 
 
@@ -70,9 +69,7 @@ class Employee(Person):
 
 
 class Manager(Employee):
-    def __init__(
-        self, name: str, employee_id: str, team_size: int
-    ) -> None:
+    def __init__(self, name: str, employee_id: str, team_size: int) -> None:
         super().__init__(name, employee_id)
         self.team_size = team_size
 
@@ -100,9 +97,7 @@ def show_movement(vehicle: Vehicle) -> None:
 
 # 7. Default arguments as a method-overloading alternative
 class Greeter:
-    def greet(
-        self, name: str = "Guest", greeting: str = "Hello"
-    ) -> str:
+    def greet(self, name: str = "Guest", greeting: str = "Hello") -> str:
         return f"{greeting}, {name}!"
 
 
@@ -131,9 +126,7 @@ class TeamMember:
 
 
 class Team:
-    def __init__(
-        self, name: str, members: list[TeamMember] | None = None
-    ) -> None:
+    def __init__(self, name: str, members: list[TeamMember] | None = None) -> None:
         self.name = name
         self.members = list(members) if members is not None else []
 

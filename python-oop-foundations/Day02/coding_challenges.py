@@ -60,10 +60,7 @@ class Employee:
         self.salary = float(salary)
 
     def __str__(self):
-        return (
-            f"{self.employee_id}: {self.name} | {self.role} | "
-            f"₹{self.salary:.2f}"
-        )
+        return f"{self.employee_id}: {self.name} | {self.role} | ₹{self.salary:.2f}"
 
 
 class EmployeeManager:
@@ -119,7 +116,7 @@ class Circle(Shape):
         self.radius = radius
 
     def area(self):
-        return pi * self.radius ** 2
+        return pi * self.radius**2
 
 
 class Rectangle(Shape):
@@ -238,7 +235,8 @@ class SchoolResult:
     def result(self):
         return (
             "Pass"
-            if self.subject_marks and all(mark >= 35 for mark in self.subject_marks.values())
+            if self.subject_marks
+            and all(mark >= 35 for mark in self.subject_marks.values())
             else "Fail"
         )
 
@@ -311,14 +309,14 @@ def main():
     movie.add_rating(4)
     movie.add_rating(5)
     movie.add_rating(3)
-    print(f"{movie.title}: average {movie.average_rating:.2f}/5 from {movie.rating_count} ratings")
+    print(
+        f"{movie.title}: average {movie.average_rating:.2f}/5 from {movie.rating_count} ratings"
+    )
 
     print("\n8. Hospital patient records")
     registry = PatientRegistry()
 
-    registry.add_patient(
-        Patient("P101", "Kiran", 35, "Routine check-up")
-    )
+    registry.add_patient(Patient("P101", "Kiran", 35, "Routine check-up"))
 
     for patient in registry.list_patients():
         print(patient)

@@ -1,7 +1,9 @@
 """JSON persistence for the library application."""
+
 import json
 from pathlib import Path
 from typing import Any
+
 from .exceptions import StorageError
 
 

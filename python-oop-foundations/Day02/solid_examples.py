@@ -21,6 +21,7 @@ class Invoice:
 
 class InvoicePrinter:
     """Responsible only for displaying an invoice."""
+
     @staticmethod
     def print_invoice(invoice):
         print("Invoice")
